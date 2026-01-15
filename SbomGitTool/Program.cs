@@ -65,6 +65,14 @@ foreach (string repoUrl in config.Repositories)
     {
         Console.WriteLine($"\n--- Processing repository: {repoUrl} ---");
         
+        // Validate repository URL
+        if (!IsValidGitUrl(repoUrl))
+        {
+            Console.WriteLine($"Error: Invalid repository URL: {repoUrl}");
+            allSucceeded = false;
+            continue;
+        }
+        
         // Extract repository name from URL
         string repoName = GetRepositoryName(repoUrl);
         Console.WriteLine($"Repository name: {repoName}");
@@ -129,6 +137,23 @@ else
     return 1;
 }
 
+static bool IsValidGitUrl(string url)
+{
+    if (string.IsNullOrWhiteSpace(url))
+        return false;
+    
+    // Check if it's a valid URI
+    if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+        return false;
+    
+    // Accept http, https, git, ssh schemes
+    string scheme = uri.Scheme.ToLowerInvariant();
+    if (scheme != "http" && scheme != "https" && scheme != "git" && scheme != "ssh")
+        return false;
+    
+    return true;
+}
+
 static string GetRepositoryName(string repoUrl)
 {
     // Extract repository name from URL
@@ -137,13 +162,13 @@ static string GetRepositoryName(string repoUrl)
     
     if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
     {
-        name = name.Substring(0, name.Length - 4);
+        name = name[..^4];
     }
     
     int lastSlash = name.LastIndexOf('/');
     if (lastSlash >= 0)
     {
-        name = name.Substring(lastSlash + 1);
+        name = name[(lastSlash + 1)..];
     }
     
     return name;
@@ -174,10 +199,14 @@ static bool RunSbomTool(string repoPath, string outputFolder, string repoName)
             return false;
         }
         
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
+        // Read output asynchronously to prevent deadlocks
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
         
         process.WaitForExit();
+        
+        string output = outputTask.Result;
+        string error = errorTask.Result;
         
         if (!string.IsNullOrWhiteSpace(output))
         {
