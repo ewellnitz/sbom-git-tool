@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
-using LibGit2Sharp;
 using SbomGitTool;
 
 if (args.Length < 2)
@@ -83,23 +82,23 @@ foreach (string repoUrl in config.Repositories)
         if (Directory.Exists(repoPath))
         {
             Console.WriteLine($"Repository already exists, pulling latest changes...");
-            try
+            if (!RunGitCommand(repoPath, "pull"))
             {
-                using var repo = new Repository(repoPath);
-                Commands.Pull(repo, new Signature("SBOM Tool", "sbom@tool.local", DateTimeOffset.Now),
-                    new PullOptions());
-                Console.WriteLine("Repository updated successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Warning: Could not pull latest changes: {ex.Message}");
+                Console.WriteLine("Warning: Could not pull latest changes");
                 Console.WriteLine("Continuing with existing repository state...");
+            }
+            else
+            {
+                Console.WriteLine("Repository updated successfully");
             }
         }
         else
         {
             Console.WriteLine($"Cloning repository to: {repoPath}");
-            Repository.Clone(repoUrl, repoPath);
+            if (!RunGitCommand(reposFolder, $"clone \"{repoUrl}\" \"{repoName}\""))
+            {
+                throw new Exception("Failed to clone repository");
+            }
             Console.WriteLine("Repository cloned successfully");
         }
         
@@ -172,6 +171,55 @@ static string GetRepositoryName(string repoUrl)
     }
     
     return name;
+}
+
+static bool RunGitCommand(string workingDirectory, string arguments)
+{
+    try
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        
+        using var process = Process.Start(startInfo);
+        if (process == null)
+        {
+            Console.WriteLine("Error: Could not start git process");
+            return false;
+        }
+        
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        
+        process.WaitForExit();
+        
+        string output = outputTask.Result;
+        string error = errorTask.Result;
+        
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            Console.WriteLine(output);
+        }
+        
+        if (!string.IsNullOrWhiteSpace(error) && process.ExitCode != 0)
+        {
+            Console.WriteLine($"Git Error: {error}");
+        }
+        
+        return process.ExitCode == 0;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error running git command: {ex.Message}");
+        return false;
+    }
 }
 
 static bool RunSbomTool(string repoPath, string outputFolder, string repoName)

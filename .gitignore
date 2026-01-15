@@ -47,3 +47,4 @@ bld/
 # Temporary repos and SBOM output
 repos/
 output/
+config.json
