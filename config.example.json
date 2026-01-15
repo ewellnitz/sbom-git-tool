@@ -1,0 +1,6 @@
+{
+  "repositories": [
+    "https://github.com/octocat/Hello-World.git",
+    "https://github.com/example/sample-repo.git"
+  ]
+}
