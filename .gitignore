@@ -45,6 +45,7 @@ bld/
 *.sln.docstates
 
 # Temporary repos and SBOM output
-repos/
 output/
-config.json
+sbom-output/
+repos*/
+*config*.json
